@@ -2,16 +2,17 @@ const app = document.getElementById("app");
 
 let dogs = [];
 let token = localStorage.getItem("admin_token");
+
 let adminMode = false;
+let typingLock = false;
 
 let ws = null;
 let reconnectTimer = null;
 let wsState = "OFFLINE";
-let typingLock = false;
 
-// =====================
+// =========================
 // HELPERS
-// =====================
+// =========================
 
 function wsBadge() {
   return `WS: ${wsState}`;
@@ -25,30 +26,14 @@ function cardColor(d) {
   return "green";
 }
 
-// =====================
-// API
-// =====================
-
 async function fetchDogs() {
   const r = await fetch("/api/dogs");
   dogs = await r.json();
 }
 
-// =====================
-// WALK
-// =====================
-
-async function startWalk(id) {
-  await fetch(`/api/walk/start?dog_id=${id}`, { method: "POST" });
-}
-
-async function stopWalk(id) {
-  await fetch(`/api/walk/stop?dog_id=${id}`, { method: "POST" });
-}
-
-// =====================
-// BOARD VIEW
-// =====================
+// =========================
+// BOARD
+// =========================
 
 function renderBoard() {
   app.innerHTML = `
@@ -64,7 +49,6 @@ function renderBoard() {
   dogs.forEach(d => {
     const c = document.createElement("div");
     c.className = `card ${cardColor(d)}`;
-
     c.innerHTML = `
       <h3>${d.name}</h3>
       <p>Status: ${d.status}</p>
@@ -78,18 +62,30 @@ function renderBoard() {
   });
 }
 
-// =====================
-// ADMIN LOGIN
-// =====================
+// =========================
+// WALK
+// =========================
+
+async function startWalk(id) {
+  await fetch(`/api/walk/start?dog_id=${id}`, { method: "POST" });
+}
+
+async function stopWalk(id) {
+  await fetch(`/api/walk/stop?dog_id=${id}`, { method: "POST" });
+}
+
+// =========================
+// LOGIN
+// =========================
 
 function showLogin() {
   app.innerHTML = `
     <div class="panel">
       <h2>Logowanie admina</h2>
-      <input id="u" placeholder="login" value="admin">
-      <input id="p" type="password" placeholder="hasło" value="admin123">
+      <input id="u" value="admin">
+      <input id="p" type="password" value="admin123">
       <button class="btn" onclick="login()">Login</button>
-      <button class="btn" onclick="backBoard()">Powrót</button>
+      <button class="btn" onclick="goBoard()">Powrót</button>
     </div>
   `;
 }
@@ -116,19 +112,15 @@ async function login() {
   renderAdmin();
 }
 
-function backBoard() {
-  adminMode = false;
-  renderBoard();
-}
-
-// =====================
-// ADMIN PANEL
-// =====================
+// =========================
+// ADMIN
+// =========================
 
 function renderAdmin() {
+
   app.innerHTML = `
     <div class="header">
-      <h2>Admin — psy (${wsBadge()})</h2>
+      <h2>Admin (${wsBadge()})</h2>
       <div>
         <button class="btn" onclick="goBoard()">Tablica</button>
         <button class="btn" onclick="logout()">Wyloguj</button>
@@ -136,9 +128,10 @@ function renderAdmin() {
     </div>
 
     <div class="panel">
-      <input id="newdog" placeholder="imię psa"
-        onfocus="typingLock=true"
-        onblur="typingLock=false">
+      <input id="newdog"
+             placeholder="imię psa"
+             onfocus="typingLock=true"
+             onblur="typingLock=false">
       <button class="btn" onclick="addDog()">Dodaj psa</button>
     </div>
 
@@ -154,31 +147,32 @@ function renderAdmin() {
     c.innerHTML = `
       <h3>${d.name}</h3>
       <p>Status: ${d.status}</p>
-      <p>Dostępny: ${d.available ? "TAK":"NIE"}</p>
+      <p>Dostępny: ${d.available ? "TAK" : "NIE"}</p>
 
       <button class="btn" onclick="toggleAvail(${d.id}, ${!d.available})">
-        ${d.available ? "Zablokuj":"Udostępnij"}
+        ${d.available ? "Zablokuj" : "Udostępnij"}
       </button>
 
       <button class="btn" onclick="deleteDog(${d.id})">
         Usuń
       </button>
     `;
+
     g.appendChild(c);
   });
 }
 
 async function addDog() {
-  const name = document.getElementById("newdog").value;
-  if (!name) return;
+  const n = document.getElementById("newdog").value;
+  if (!n) return;
 
-  await fetch(`/api/admin/dogs?name=${encodeURIComponent(name)}`, {
+  await fetch(`/api/admin/dogs?name=${encodeURIComponent(n)}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }
   });
 
-  document.getElementById("newdog").value = "";
-  fetchDogs().then(renderAdmin);
+  await fetchDogs();
+  renderAdmin();
 }
 
 async function toggleAvail(id,val){
@@ -187,7 +181,8 @@ async function toggleAvail(id,val){
     headers:{Authorization:`Bearer ${token}`}
   });
 
-  fetchDogs().then(renderAdmin);
+  await fetchDogs();
+  renderAdmin();
 }
 
 async function deleteDog(id){
@@ -198,46 +193,52 @@ async function deleteDog(id){
     headers:{Authorization:`Bearer ${token}`}
   });
 
-  fetchDogs().then(renderAdmin);
-}
-
-function goBoard(){
-  adminMode=false;
-  renderBoard();
+  await fetchDogs();
+  renderAdmin();
 }
 
 function logout(){
   localStorage.removeItem("admin_token");
-  token=null;
-  adminMode=false;
+  adminMode = false;
+  token = null;
   renderBoard();
 }
 
-// =====================
-// WEBSOCKET
-// =====================
+function goBoard(){
+  adminMode = false;
+  renderBoard();
+}
+
+// =========================
+// WEBSOCKET (FINAL FIX)
+// =========================
 
 function connectWS() {
+
   ws = new WebSocket(
     `${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`
   );
 
   ws.onopen = () => {
     wsState = "ONLINE";
-    adminMode ? renderAdmin() : renderBoard();
   };
 
   ws.onmessage = async () => {
+
     await fetchDogs();
 
-    if (adminMode && typingLock) return;
-
-    adminMode ? renderAdmin() : renderBoard();
+    // 🔥 NAJWAŻNIEJSZE:
+    if (adminMode) {
+      if (!typingLock) {
+        renderAdmin();  // tylko jeśli nie pisze
+      }
+    } else {
+      renderBoard();    // tablica zawsze live
+    }
   };
 
   ws.onclose = () => {
     wsState = "OFFLINE";
-    adminMode ? renderAdmin() : renderBoard();
 
     if (!reconnectTimer) {
       reconnectTimer = setTimeout(() => {
@@ -250,9 +251,9 @@ function connectWS() {
   ws.onerror = () => ws.close();
 }
 
-// =====================
+// =========================
 // START
-// =====================
+// =========================
 
 (async () => {
   await fetchDogs();
