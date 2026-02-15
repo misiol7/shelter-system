@@ -1,6 +1,0 @@
-body{font-family:Arial;background:#f7f7f7;margin:0}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:20px}
-.card{background:white;padding:10px;border-radius:8px}
-.card.blue{border-left:5px solid #3b82f6}
-.card.green{border-left:5px solid #22c55e}
-.card.gray{border-left:5px solid #9ca3af}
