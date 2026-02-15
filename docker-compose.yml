@@ -1,4 +1,5 @@
 services:
+
   postgres:
     image: postgres:15
     environment:
@@ -10,9 +11,6 @@ services:
 
   backend:
     build: ./backend
-    environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@postgres:5432/shelter
-      SECRET_KEY: supersecret
     depends_on:
       - postgres
     restart: unless-stopped
@@ -36,13 +34,13 @@ services:
       - frontend
     restart: unless-stopped
 
-volumes:
-  pgdata:
-  caddy_data:
-  caddy_config:
-
   scheduler:
     build: ./scheduler
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
