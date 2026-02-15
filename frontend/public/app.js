@@ -2,7 +2,6 @@ const app = document.getElementById("app");
 
 let dogs = [];
 let token = localStorage.getItem("admin_token");
-
 let adminMode = false;
 let typingLock = false;
 
@@ -10,13 +9,11 @@ let ws = null;
 let reconnectTimer = null;
 let wsState = "OFFLINE";
 
+let boardInitialized = false;
+
 // =========================
 // HELPERS
 // =========================
-
-function wsBadge() {
-  return `WS: ${wsState}`;
-}
 
 function cardColor(d) {
   if (!d.available) return "gray";
@@ -32,13 +29,38 @@ async function fetchDogs() {
 }
 
 // =========================
-// BOARD
+// BOARD (ULTRA FAST)
 // =========================
+
+function createDogCard(d) {
+  const c = document.createElement("div");
+  c.id = `dog-${d.id}`;
+  c.className = `card ${cardColor(d)}`;
+
+  c.innerHTML = `
+    <h3>${d.name}</h3>
+    <p>Status: ${d.status}</p>
+    <p>Dzisiaj: ${d.daily_minutes} min</p>
+    ${d.available ? `
+      <button class="btn" onclick="startWalk(${d.id})">START</button>
+      <button class="btn" onclick="stopWalk(${d.id})">STOP</button>
+    ` : `<p>Niedostępny</p>`}
+  `;
+
+  return c;
+}
+
+function updateDogCard(d) {
+  const old = document.getElementById(`dog-${d.id}`);
+  const newCard = createDogCard(d);
+
+  if (old) old.replaceWith(newCard);
+}
 
 function renderBoard() {
   app.innerHTML = `
     <div class="header">
-      <h2>🐾 Ewidencja spacerów (${wsBadge()})</h2>
+      <h2>🐾 Ewidencja spacerów (WS: ${wsState})</h2>
       <button class="btn" onclick="showLogin()">Admin</button>
     </div>
     <div class="grid" id="grid"></div>
@@ -46,20 +68,9 @@ function renderBoard() {
 
   const g = document.getElementById("grid");
 
-  dogs.forEach(d => {
-    const c = document.createElement("div");
-    c.className = `card ${cardColor(d)}`;
-    c.innerHTML = `
-      <h3>${d.name}</h3>
-      <p>Status: ${d.status}</p>
-      <p>Dzisiaj: ${d.daily_minutes} min</p>
-      ${d.available ? `
-        <button class="btn" onclick="startWalk(${d.id})">START</button>
-        <button class="btn" onclick="stopWalk(${d.id})">STOP</button>
-      ` : `<p>Niedostępny</p>`}
-    `;
-    g.appendChild(c);
-  });
+  dogs.forEach(d => g.appendChild(createDogCard(d)));
+
+  boardInitialized = true;
 }
 
 // =========================
@@ -75,7 +86,7 @@ async function stopWalk(id) {
 }
 
 // =========================
-// LOGIN
+// ADMIN LOGIN
 // =========================
 
 function showLogin() {
@@ -99,13 +110,9 @@ async function login() {
     { method: "POST" }
   );
 
-  if (r.status !== 200) {
-    alert("Błędne dane");
-    return;
-  }
+  if (r.status !== 200) return alert("Błędne dane");
 
-  const data = await r.json();
-  token = data.token;
+  token = (await r.json()).token;
   localStorage.setItem("admin_token", token);
 
   adminMode = true;
@@ -113,14 +120,13 @@ async function login() {
 }
 
 // =========================
-// ADMIN
+// ADMIN PANEL
 // =========================
 
 function renderAdmin() {
-
   app.innerHTML = `
     <div class="header">
-      <h2>Admin (${wsBadge()})</h2>
+      <h2>Admin (WS: ${wsState})</h2>
       <div>
         <button class="btn" onclick="goBoard()">Tablica</button>
         <button class="btn" onclick="logout()">Wyloguj</button>
@@ -146,11 +152,10 @@ function renderAdmin() {
 
     c.innerHTML = `
       <h3>${d.name}</h3>
-      <p>Status: ${d.status}</p>
-      <p>Dostępny: ${d.available ? "TAK" : "NIE"}</p>
+      <p>Dostępny: ${d.available ? "TAK":"NIE"}</p>
 
       <button class="btn" onclick="toggleAvail(${d.id}, ${!d.available})">
-        ${d.available ? "Zablokuj" : "Udostępnij"}
+        ${d.available ? "Zablokuj":"Udostępnij"}
       </button>
 
       <button class="btn" onclick="deleteDog(${d.id})">
@@ -170,9 +175,6 @@ async function addDog() {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` }
   });
-
-  await fetchDogs();
-  renderAdmin();
 }
 
 async function toggleAvail(id,val){
@@ -180,9 +182,6 @@ async function toggleAvail(id,val){
     method:"POST",
     headers:{Authorization:`Bearer ${token}`}
   });
-
-  await fetchDogs();
-  renderAdmin();
 }
 
 async function deleteDog(id){
@@ -192,15 +191,12 @@ async function deleteDog(id){
     method:"DELETE",
     headers:{Authorization:`Bearer ${token}`}
   });
-
-  await fetchDogs();
-  renderAdmin();
 }
 
 function logout(){
   localStorage.removeItem("admin_token");
-  adminMode = false;
   token = null;
+  adminMode = false;
   renderBoard();
 }
 
@@ -210,7 +206,7 @@ function goBoard(){
 }
 
 // =========================
-// WEBSOCKET (FINAL FIX)
+// WEBSOCKET PRO 2.0
 // =========================
 
 function connectWS() {
@@ -219,22 +215,25 @@ function connectWS() {
     `${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`
   );
 
-  ws.onopen = () => {
-    wsState = "ONLINE";
-  };
+  ws.onopen = () => { wsState = "ONLINE"; };
 
   ws.onmessage = async () => {
 
     await fetchDogs();
 
-    // 🔥 NAJWAŻNIEJSZE:
+    // ADMIN: nie ruszaj podczas pisania
     if (adminMode) {
-      if (!typingLock) {
-        renderAdmin();  // tylko jeśli nie pisze
-      }
-    } else {
-      renderBoard();    // tablica zawsze live
+      if (!typingLock) renderAdmin();
+      return;
     }
+
+    // TABLICA: update tylko kafelków
+    if (!boardInitialized) {
+      renderBoard();
+      return;
+    }
+
+    dogs.forEach(updateDogCard);
   };
 
   ws.onclose = () => {
