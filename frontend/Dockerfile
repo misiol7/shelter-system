@@ -1,0 +1,1 @@
+FROM nginx:alpine\nCOPY public/ /usr/share/nginx/html/\nCOPY nginx.conf /etc/nginx/conf.d/default.conf\n
