@@ -1,1 +1,0 @@
-document.getElementById('app').innerHTML = '<h1 style="padding:20px">🐾 Ewidencja spacerów (build test)</h1>';
