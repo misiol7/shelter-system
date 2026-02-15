@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: shelter
+
+  backend:
+    build: ./backend
+    depends_on:
+      - postgres
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - frontend
