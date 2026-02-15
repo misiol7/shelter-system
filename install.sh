@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 APP_DIR=/opt/shelter-system
-REPO_URL=https://github.com/TWOJ_LOGIN/shelter-system.git
+REPO_URL=https://github.com/misiol7/shelter-system.git
 
 apt update -y
 apt install -y curl git ca-certificates gnupg lsb-release
