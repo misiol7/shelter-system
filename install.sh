@@ -1,62 +1,89 @@
 #!/bin/bash
 set -e
 
-echo "======================================"
-echo "   SCHRONISKO PRO MAX INSTALLER"
-echo "======================================"
-
 APP_DIR="/opt/shelter-system"
-REPO_URL="https://github.com/misiol7/shelter-system.git"
+REPO_URL="https://github.com/TWOJ_LOGIN/shelter-system.git"
 
-# ===== UPDATE SYSTEM =====
+echo "======================================"
+echo " SCHRONISKO AUTO-FIX PRO INSTALLER"
+echo "======================================"
+
+# ===== SYSTEM =====
 apt update -y
 apt upgrade -y
-
-# ===== TOOLS =====
 apt install -y curl git ca-certificates gnupg lsb-release
 
-# ===== INSTALL DOCKER =====
+# ===== DOCKER =====
 if ! command -v docker &> /dev/null; then
-    echo "Installing Docker..."
+  echo "Installing Docker..."
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  echo \
+  "deb [arch=$(dpkg --print-architecture) \
+  signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" \
+  > /etc/apt/sources.list.d/docker.list
 
-    echo \
-      "deb [arch=$(dpkg --print-architecture) \
-      signed-by=/etc/apt/keyrings/docker.gpg] \
-      https://download.docker.com/linux/ubuntu \
-      $(lsb_release -cs) stable" \
-      > /etc/apt/sources.list.d/docker.list
-
-    apt update -y
-
-    apt install -y docker-ce docker-ce-cli containerd.io \
-        docker-buildx-plugin docker-compose-plugin
+  apt update -y
+  apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 fi
 
 systemctl enable docker
 systemctl start docker
 
-# ===== CLEAN OLD INSTALL =====
-if [ -d "$APP_DIR" ]; then
-    echo "Removing old installation..."
-    rm -rf "$APP_DIR"
-fi
+# ===== CLEAN OLD =====
+rm -rf "$APP_DIR"
 
-# ===== CLONE PROJECT =====
+# ===== CLONE =====
 git clone "$REPO_URL" "$APP_DIR"
 cd "$APP_DIR"
 
-# ===== BUILD + RUN =====
-docker compose down || true
-docker compose up -d --build
+# ===== AUTO-FIX DOCKERFILE =====
+echo "Checking backend Dockerfile..."
 
-# ===== AUTO START =====
+cat > backend/Dockerfile <<'EOF'
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD ["uvicorn","main:app","--host","0.0.0.0","--port","8000"]
+EOF
+
+# ===== BUILD (RETRY) =====
+echo "Building containers..."
+if ! docker compose build --no-cache; then
+    echo "First build failed -> retry..."
+    sleep 5
+    docker compose build --no-cache
+fi
+
+# ===== START =====
+docker compose up -d
+
+# ===== WAIT HEALTH =====
+echo "Waiting backend..."
+sleep 10
+
+if docker compose ps | grep backend | grep -q "Up"; then
+    echo "Backend OK"
+else
+    echo "Backend failed -> showing logs"
+    docker compose logs backend --tail=50
+fi
+
+# ===== AUTOSTART SERVICE =====
 cat <<EOF >/etc/systemd/system/shelter.service
 [Unit]
-Description=Schronisko PRO MAX
+Description=Schronisko PRO
 After=docker.service
 Requires=docker.service
 
@@ -79,8 +106,8 @@ IP=$(hostname -I | awk '{print $1}')
 
 echo ""
 echo "======================================"
-echo " INSTALACJA ZAKOŃCZONA"
+echo " INSTALL COMPLETE (AUTO-FIX PRO)"
 echo "======================================"
-echo "Otwórz:"
+echo "Open:"
 echo "http://$IP"
 echo ""
