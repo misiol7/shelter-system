@@ -9,7 +9,12 @@ function uEl(){return document.getElementById("u")} function pEl(){return docume
 async function loadDogs(admin=false){dogs=await (await fetch("/api/dogs")).json(); admin?renderAdmin():renderBoard();}
 async function startWalk(id){await fetch(`/api/walk/start?dog_id=${id}`,{method:"POST"})}
 async function stopWalk(id){await fetch(`/api/walk/stop?dog_id=${id}`,{method:"POST"})}
-function renderBoard(){app.innerHTML=`<div class='header'><h2>🐾 Ewidencja spacerów</h2><button class='btn' onclick='showLogin()'>Admin</button></div><div class='grid' id='g'></div>`;let g=document.getElementById("g");dogs.forEach(d=>{let c=document.createElement("div");c.className=`card ${color(d)}`;c.innerHTML=`<h3>${d.name}</h3><p>${d.status}</p><p>Dziś: ${d.daily_minutes} min</p>${d.available?`<button class='btn' onclick='startWalk(${d.id})'>START</button><button class='btn' onclick='stopWalk(${d.id})'>STOP</button>`:"<p>Niedostępny</p>"}`;g.appendChild(c);});}
+<h2>🐾 Ewidencja spacerów
+  <small style="font-size:12px;margin-left:10px;">
+    WS: <span id="wsStatus">ONLINE</span>
+  </small>
+</h2>
+
 function renderAdmin(){app.innerHTML=`<div class='header'><h2>Admin</h2><div><button class='btn' onclick='showBoard()'>Tablica</button><button class='btn' onclick='logout()'>Wyloguj</button></div></div><div class='panel'><input id='newdog' placeholder='imię psa'><button class='btn' onclick='addDog()'>Dodaj</button></div><div class='grid' id='g'></div>`;let g=document.getElementById("g");dogs.forEach(d=>{let c=document.createElement("div");c.className='card blue';c.innerHTML=`<h3>${d.name}</h3><p>Dostępny: ${d.available}</p><button class='btn' onclick='toggle(${d.id},${!d.available})'>${d.available?"Zablokuj":"Udostępnij"}</button>`;g.appendChild(c);});}
 async function addDog(){let n=document.getElementById("newdog").value;if(!n)return;await fetch(`/api/admin/dogs?name=${encodeURIComponent(n)}`,{method:"POST",headers:{Authorization:`Bearer ${token}`}});loadDogs(true)}
 async function toggle(id,val){await fetch(`/api/admin/dogs/${id}/availability?available=${val}`,{method:"POST",headers:{Authorization:`Bearer ${token}`}});loadDogs(true)}
