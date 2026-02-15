@@ -6,7 +6,7 @@ echo "   SCHRONISKO PRO MAX INSTALLER"
 echo "======================================"
 
 APP_DIR="/opt/shelter-system"
-REPO_URL="https://github.com/TWOJ_LOGIN/shelter-system.git"
+REPO_URL="https://github.com/misiol7/shelter-system.git"
 
 # ===== UPDATE SYSTEM =====
 apt update -y
