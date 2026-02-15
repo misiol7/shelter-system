@@ -5,132 +5,105 @@ let token = localStorage.getItem("admin_token");
 let adminMode = false;
 let typingLock = false;
 
-let ws = null;
-let reconnectTimer = null;
+let ws;
 let wsState = "OFFLINE";
 
-let boardInitialized = false;
-
-// =========================
-// HELPERS
 // =========================
 
-function cardColor(d) {
-  if (!d.available) return "gray";
-  if (d.status !== "WALKING") return "blue";
-  if (d.daily_minutes >= 90) return "red";
-  if (d.daily_minutes >= 60) return "orange";
-  return "green";
-}
-
-async function fetchDogs() {
+async function fetchDogs(){
   const r = await fetch("/api/dogs");
   dogs = await r.json();
 }
 
-// =========================
-// BOARD (ULTRA FAST)
-// =========================
-
-function createDogCard(d) {
-  const c = document.createElement("div");
-  c.id = `dog-${d.id}`;
-  c.className = `card ${cardColor(d)}`;
-
-  c.innerHTML = `
-    <h3>${d.name}</h3>
-    <p>Status: ${d.status}</p>
-    <p>Dzisiaj: ${d.daily_minutes} min</p>
-    ${d.available ? `
-      <button class="btn" onclick="startWalk(${d.id})">START</button>
-      <button class="btn" onclick="stopWalk(${d.id})">STOP</button>
-    ` : `<p>Niedostępny</p>`}
-  `;
-
-  return c;
+function color(d){
+  if(!d.available) return "gray";
+  if(d.status!=="WALKING") return "blue";
+  if(d.daily_minutes>=90) return "red";
+  if(d.daily_minutes>=60) return "orange";
+  return "green";
 }
 
-function updateDogCard(d) {
-  const old = document.getElementById(`dog-${d.id}`);
-  const newCard = createDogCard(d);
+// =========================
+// TABLICA
+// =========================
 
-  if (old) old.replaceWith(newCard);
-}
-
-function renderBoard() {
+function renderBoard(){
   app.innerHTML = `
     <div class="header">
-      <h2>🐾 Ewidencja spacerów (WS: ${wsState})</h2>
+      <h2>🐾 Ewidencja spacerów (WS:${wsState})</h2>
       <button class="btn" onclick="showLogin()">Admin</button>
     </div>
     <div class="grid" id="grid"></div>
   `;
 
-  const g = document.getElementById("grid");
+  const g=document.getElementById("grid");
 
-  dogs.forEach(d => g.appendChild(createDogCard(d)));
-
-  boardInitialized = true;
+  dogs.forEach(d=>{
+    const c=document.createElement("div");
+    c.className=`card ${color(d)}`;
+    c.innerHTML=`
+      <h3>${d.name}</h3>
+      <p>Status: ${d.status}</p>
+      <p>Dzisiaj: ${d.daily_minutes} min</p>
+      ${d.available?`
+      <button class="btn" onclick="startWalk(${d.id})">START</button>
+      <button class="btn" onclick="stopWalk(${d.id})">STOP</button>
+      `:`<p>Niedostępny</p>`}
+    `;
+    g.appendChild(c);
+  });
 }
 
 // =========================
-// WALK
+// SPACERY
 // =========================
 
-async function startWalk(id) {
-  await fetch(`/api/walk/start?dog_id=${id}`, { method: "POST" });
+async function startWalk(id){
+  await fetch(`/api/walk/start?dog_id=${id}`,{method:"POST"});
+}
+async function stopWalk(id){
+  await fetch(`/api/walk/stop?dog_id=${id}`,{method:"POST"});
 }
 
-async function stopWalk(id) {
-  await fetch(`/api/walk/stop?dog_id=${id}`, { method: "POST" });
-}
-
 // =========================
-// ADMIN LOGIN
+// LOGIN
 // =========================
 
-function showLogin() {
-  app.innerHTML = `
+function showLogin(){
+  app.innerHTML=`
     <div class="panel">
       <h2>Logowanie admina</h2>
       <input id="u" value="admin">
       <input id="p" type="password" value="admin123">
       <button class="btn" onclick="login()">Login</button>
-      <button class="btn" onclick="goBoard()">Powrót</button>
     </div>
   `;
 }
 
-async function login() {
-  const u = document.getElementById("u").value;
-  const p = document.getElementById("p").value;
+async function login(){
+  const u=document.getElementById("u").value;
+  const p=document.getElementById("p").value;
 
-  const r = await fetch(
-    `/api/admin/login?username=${encodeURIComponent(u)}&password=${encodeURIComponent(p)}`,
-    { method: "POST" }
-  );
+  const r=await fetch(`/api/admin/login?username=${u}&password=${p}`,{method:"POST"});
+  if(r.status!==200){alert("Błąd");return;}
 
-  if (r.status !== 200) return alert("Błędne dane");
+  token=(await r.json()).token;
+  localStorage.setItem("admin_token",token);
 
-  token = (await r.json()).token;
-  localStorage.setItem("admin_token", token);
-
-  adminMode = true;
+  adminMode=true;
   renderAdmin();
 }
 
 // =========================
-// ADMIN PANEL
+// ADMIN
 // =========================
 
-function renderAdmin() {
-  app.innerHTML = `
+function renderAdmin(){
+
+  app.innerHTML=`
     <div class="header">
-      <h2>Admin (WS: ${wsState})</h2>
-      <div>
-        <button class="btn" onclick="goBoard()">Tablica</button>
-        <button class="btn" onclick="logout()">Wyloguj</button>
-      </div>
+      <h2>Admin</h2>
+      <button class="btn" onclick="adminMode=false;renderBoard()">Tablica</button>
     </div>
 
     <div class="panel">
@@ -144,117 +117,70 @@ function renderAdmin() {
     <div class="grid" id="grid"></div>
   `;
 
-  const g = document.getElementById("grid");
+  const g=document.getElementById("grid");
 
-  dogs.forEach(d => {
-    const c = document.createElement("div");
-    c.className = "card blue";
-
-    c.innerHTML = `
+  dogs.forEach(d=>{
+    const c=document.createElement("div");
+    c.className="card blue";
+    c.innerHTML=`
       <h3>${d.name}</h3>
-      <p>Dostępny: ${d.available ? "TAK":"NIE"}</p>
-
-      <button class="btn" onclick="toggleAvail(${d.id}, ${!d.available})">
-        ${d.available ? "Zablokuj":"Udostępnij"}
-      </button>
-
-      <button class="btn" onclick="deleteDog(${d.id})">
-        Usuń
-      </button>
+      <button class="btn" onclick="deleteDog(${d.id})">Usuń</button>
     `;
-
     g.appendChild(c);
   });
 }
 
-async function addDog() {
-  const n = document.getElementById("newdog").value;
-  if (!n) return;
+async function addDog(){
+  const n=document.getElementById("newdog").value;
+  if(!n) return;
 
-  await fetch(`/api/admin/dogs?name=${encodeURIComponent(n)}`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token}` }
-  });
-}
-
-async function toggleAvail(id,val){
-  await fetch(`/api/admin/dogs/${id}/availability?available=${val}`,{
+  await fetch(`/api/admin/dogs?name=${encodeURIComponent(n)}`,{
     method:"POST",
     headers:{Authorization:`Bearer ${token}`}
   });
+
+  document.getElementById("newdog").value="";
+
+  await fetchDogs();
+  renderAdmin(); // ⭐ brakowało tego
 }
 
 async function deleteDog(id){
-  if(!confirm("Usunąć psa?")) return;
-
   await fetch(`/api/admin/dogs/${id}`,{
     method:"DELETE",
     headers:{Authorization:`Bearer ${token}`}
   });
-}
 
-function logout(){
-  localStorage.removeItem("admin_token");
-  token = null;
-  adminMode = false;
-  renderBoard();
-}
-
-function goBoard(){
-  adminMode = false;
-  renderBoard();
+  await fetchDogs();
+  renderAdmin();
 }
 
 // =========================
-// WEBSOCKET PRO 2.0
+// WEBSOCKET
 // =========================
 
-function connectWS() {
+function connectWS(){
+  ws=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`);
 
-  ws = new WebSocket(
-    `${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`
-  );
+  ws.onopen=()=>wsState="ONLINE";
 
-  ws.onopen = () => { wsState = "ONLINE"; };
-
-  ws.onmessage = async () => {
-
+  ws.onmessage=async ()=>{
     await fetchDogs();
 
-    // ADMIN: nie ruszaj podczas pisania
-    if (adminMode) {
-      if (!typingLock) renderAdmin();
-      return;
-    }
-
-    // TABLICA: update tylko kafelków
-    if (!boardInitialized) {
-      renderBoard();
-      return;
-    }
-
-    dogs.forEach(updateDogCard);
-  };
-
-  ws.onclose = () => {
-    wsState = "OFFLINE";
-
-    if (!reconnectTimer) {
-      reconnectTimer = setTimeout(() => {
-        reconnectTimer = null;
-        connectWS();
-      }, 3000);
+    if(adminMode){
+      if(!typingLock) renderAdmin();
+    }else{
+      renderBoard();   // ⭐ TABLICA zawsze refresh
     }
   };
 
-  ws.onerror = () => ws.close();
+  ws.onclose=()=>{
+    wsState="OFFLINE";
+    setTimeout(connectWS,3000);
+  };
 }
 
-// =========================
-// START
-// =========================
-
-(async () => {
+(async ()=>{
   await fetchDogs();
   renderBoard();
   connectWS();
