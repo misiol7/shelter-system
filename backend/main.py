@@ -125,3 +125,19 @@ def set_availability(dog_id:int, available: bool,
         d.status = "IN_KENNEL"
     db.commit()
     return {"ok": True}
+@app.delete("/admin/dogs/{dog_id}")
+def delete_dog(dog_id:int,
+               admin=Depends(current_admin),
+               db:Session=Depends(get_db)):
+
+    dog = db.query(Dog).get(dog_id)
+    if not dog:
+        raise HTTPException(404, "Dog not found")
+
+    # usuń aktywne spacery
+    db.query(Walk).filter(Walk.dog_id==dog_id).delete()
+
+    db.delete(dog)
+    db.commit()
+
+    return {"ok": True}
