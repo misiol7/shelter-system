@@ -15,6 +15,53 @@ async function addDog(){let n=document.getElementById("newdog").value;if(!n)retu
 async function toggle(id,val){await fetch(`/api/admin/dogs/${id}/availability?available=${val}`,{method:"POST",headers:{Authorization:`Bearer ${token}`}});loadDogs(true)}
 function logout(){localStorage.removeItem("admin_token");token=null;showLogin()}
 function showBoard(){loadDogs(false)}
-const ws=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`);
-ws.onmessage=()=>loadDogs(false);
+// ============================
+// AUTO RECONNECT WEBSOCKET
+// ============================
+
+let ws = null;
+let reconnectDelay = 2000;
+let wsStatus = "ONLINE";
+
+function showStatus() {
+  let el = document.getElementById("wsStatus");
+  if (!el) return;
+  el.innerText = wsStatus;
+  el.style.color = wsStatus === "ONLINE" ? "green" : "red";
+}
+
+function connectWS() {
+  ws = new WebSocket(
+    `${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`
+  );
+
+  ws.onopen = () => {
+    wsStatus = "ONLINE";
+    reconnectDelay = 2000;
+    showStatus();
+    console.log("WS connected");
+  };
+
+  ws.onmessage = () => {
+    loadDogs(false);
+  };
+
+  ws.onclose = () => {
+    wsStatus = "OFFLINE";
+    showStatus();
+    console.log("WS disconnected — reconnecting...");
+
+    setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 15000);
+      connectWS();
+    }, reconnectDelay);
+  };
+
+  ws.onerror = () => {
+    ws.close();
+  };
+}
+
+connectWS();
+
 showBoard();
