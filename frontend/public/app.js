@@ -146,7 +146,17 @@ function logout(){
 function connectWS(){
   ws=new WebSocket(`${location.protocol==="https:"?"wss":"ws"}://${location.host}/ws`);
   ws.onopen=()=>{wsState="ONLINE"; adminMode?renderAdmin():renderBoard();};
-  ws.onmessage=()=>loadDogs();
+  ws.onmessage = async () => {
+  const r = await fetch("/api/dogs");
+  dogs = await r.json();
+
+  if (!adminMode) {
+    renderBoard();
+  } else {
+    renderAdmin(); // tylko aktualizacja listy, bez resetu inputa
+  }
+};
+
   ws.onclose=()=>{wsState="OFFLINE"; adminMode?renderAdmin():renderBoard(); reconnect();};
   ws.onerror=()=>ws.close();
 }
